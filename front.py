@@ -78,12 +78,6 @@ def edit_rules_window(headers):
         if editing_entry:
             save_edit()
 
-    def destroy_phantom_entry():
-        nonlocal editing_entry
-        if editing_entry:
-            editing_entry.destroy()
-            editing_entry = None
-
     tree.bind("<Button-1>", edit_cell)
     frame.bind("<Button-1>", save_edit_on_click)
 
