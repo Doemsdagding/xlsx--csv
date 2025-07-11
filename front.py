@@ -30,7 +30,8 @@ def edit_rules_window(headers):
         for item in selected_items:
             tree.delete(item)
 
-    delete_row_button = tk.Button(table_window, text="Delete Row", command=delete_row)
+    delete_row_button = tk.Button(table_window, text="Delete Row",
+                                    command=delete_row)
     delete_row_button.pack(pady=10)
 
     # Enable cell editing trackers
@@ -91,12 +92,14 @@ def land_window():
     window.title("XLSX_to_CSV_Converter")
     window.geometry("400x300")
 
-    label = tk.Label(window, text="XLSX to CSV Converter", font=("Arial", 16))
+    label = tk.Label(window, text="XLSX to CSV Converter",
+        font=("Arial", 16))
     label.pack(pady=20)
 
     # Add a button to open the edit rules window
     headers = ["Header1", "Header2", "Header3"]
-    button = tk.Button(window, text="Edit rules", command=lambda: edit_rules_window(headers))
+    button = tk.Button(window, text="Edit rules", 
+                        command=lambda: edit_rules_window(headers))
     button.pack(pady=10)
 
     window.mainloop()
