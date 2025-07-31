@@ -1,102 +1,248 @@
 import tkinter as tk
 from tkinter import ttk
+import json
+import os
 
-def edit_rules_window(headers):
-    table_window = tk.Toplevel()
-    table_window.title("Excel-like Table")
-    table_window.geometry("600x400")
 
-    # Create a frame for the table
-    frame = tk.Frame(table_window)
-    frame.pack(fill=tk.BOTH, expand=True)
+class EditRulesWindow:
+    """
+    A window for editing table rules and saving them to a file.
+    Allows adding, deleting, and editing rows in a table, with
+        persistent storage in the user's AppData folder.
+    """
+    def __init__(self, headers, save_file, title):
+        """
+        Initialize the EditRulesWindow.
+        Args:
+            headers (list): List of column headers for the table.
+            save_file (str): Filename for saving the table data.
+            title (str): Title of the window.
+        """
+        # Initialize the main window
+        self.headers = headers
+        self.save_file = self.get_user_data_path(save_file)
+        self.rows = []
+        self.table_window = tk.Toplevel()
+        self.table_window.title(title)
+        self.table_window.geometry("600x400")
 
-    # Create the treeview (table)
-    tree = ttk.Treeview(frame, columns=headers, show="headings")
-    for header in headers:
-        tree.heading(header, text=header)
-        tree.column(header, width=100, anchor="center")
-    tree.pack(fill=tk.BOTH, expand=True)
+        frame = tk.Frame(self.table_window)
+        frame.pack(fill=tk.BOTH, expand=True)
 
-    # Add a button to add rows
-    def add_row():
-        tree.insert("", "end", values=["" for _ in headers])
+        # Create a Treeview widget for the table
+        self.tree = ttk.Treeview(frame, columns=self.headers, show="headings")
+        for header in self.headers:
+            self.tree.heading(header, text=header)
+            self.tree.column(header, width=100, anchor="center")
 
-    add_row_button = tk.Button(table_window, text="Add Row", command=add_row)
-    add_row_button.pack(pady=10)
+        # Add a vertical scrollbar to the treeview
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.pack(fill=tk.BOTH, expand=True)
 
-    # Add a button to delete selected rows
-    def delete_row():
-        selected_items = tree.selection()
+        # Buttons for adding, deleting
+        self.add_row_button = tk.Button(
+            self.table_window, text="Add Row", command=self.add_row
+        )
+        self.add_row_button.pack(pady=10)
+
+        self.delete_row_button = tk.Button(
+            self.table_window, text="Delete Row", command=self.delete_row
+        )
+        self.delete_row_button.pack(pady=10)
+
+        # Variables for tracking the editing state
+        self.editing_entry = None
+        self.editing_item = None
+        self.editing_column_index = None
+
+        # Bind events for editing cells
+        self.tree.bind("<Button-1>", self.edit_cell)
+        frame.bind("<Button-1>", self.save_edit_on_click)
+
+        # Button to save all rows to the file
+        if self.save_file and os.path.exists(self.save_file):
+            self.load_rows()
+        save_button = tk.Button(
+            self.table_window, text="Save Rows", command=self.save_rows
+        )
+        save_button.pack(pady=10)
+
+    def get_user_data_path(self, filename):
+        """
+        Get the full path for saving user data in the AppData folder.
+        Args:
+            filename (str): The filename to use for saving data.
+        Returns:
+            str: The full path to the file in AppData.
+        """
+        appdata = os.getenv("APPDATA") or os.path.expanduser("~")
+        folder = os.path.join(appdata, "xlsx_csv_repo")
+        # Create the xlsx_csv_repo folder if it doesn't exist
+        os.makedirs(folder, exist_ok=True)
+        return os.path.join(folder, filename)
+
+    def add_row(self):
+        """
+        Add a new empty row to the table.
+        """
+        self.tree.insert("", "end", values=["" for _ in self.headers])
+
+    def delete_row(self):
+        """
+        Delete the selected rows from the table.
+        """
+        selected_items = self.tree.selection()
         for item in selected_items:
-            tree.delete(item)
+            self.tree.delete(item)
 
-    delete_row_button = tk.Button(table_window, text="Delete Row",
-                                    command=delete_row)
-    delete_row_button.pack(pady=10)
+    def save_edit(self, event=None):
+        """
+        Save the current edit in the table cell, if any.
+        """
+        if (
+            self.editing_entry
+            and self.editing_item is not None
+            and self.editing_column_index is not None
+        ):
+            # Retrieve value from entry widget and update the treeview
+            new_value = self.editing_entry.get()
+            values = list(self.tree.item(self.editing_item, "values"))
+            values[self.editing_column_index] = new_value
+            self.tree.item(self.editing_item, values=values)
+            self.editing_entry.destroy()
+            self.editing_entry = None
+            self.editing_item = None
+            self.editing_column_index = None
 
-    # Enable cell editing trackers
-    editing_entry = None
-    editing_item = None
-    editing_column_index = None
+    def edit_cell(self, event):
+        """
+        Start editing a cell in the table when clicked.
+        """
+        # Save any currently edited cell before starting a new edit
+        if self.editing_entry:
+            self.save_edit()
 
-    def save_edit(event=None):
-        nonlocal editing_entry, editing_item, editing_column_index
-        if editing_entry and editing_item is not None \
-        and editing_column_index is not None:
-            new_value = editing_entry.get()
-            values = list(tree.item(editing_item, "values"))
-            values[editing_column_index] = new_value
-            tree.item(editing_item, values=values)
-            editing_entry.destroy()
-            editing_entry = None
-            editing_item = None
-            editing_column_index = None
+        # Get the clicked item and column
+        selected_item = self.tree.selection()
 
-    def edit_cell(event):
-        nonlocal editing_entry, editing_item, editing_column_index
-        if editing_entry:
-            save_edit()
-
-        selected_item = tree.selection()
+        # if there is a selected item, start editing
         if selected_item:
             item = selected_item[0]
-            column = tree.identify_column(event.x)
+            column = self.tree.identify_column(event.x)
             col_index = int(column.replace("#", "")) - 1
+            # Check if the column index is valid
             if col_index >= 0:
-                x, y, width, height = tree.bbox(item, column)
-                editing_entry = tk.Entry(frame)
-                editing_entry.place(x=x, y=y, width=width, height=height)
-                editing_entry.insert(0, tree.item(item, "values")[col_index])
-                editing_item = item
-                editing_column_index = col_index
+                # Create the entry widget for editing
+                x, y, width, height = self.tree.bbox(item, column)
+                self.editing_entry = tk.Entry(self.tree)
+                self.editing_entry.place(x=x, y=y, width=width, height=height)
+                self.editing_entry.insert(
+                    0, self.tree.item(item, "values")[col_index]
+                )
+                # Bind the location of the field to use while saving
+                self.editing_item = item
+                self.editing_column_index = col_index
 
-                editing_entry.bind("<Return>", save_edit)
-                editing_entry.focus()
+                # Bind the entry to save on return key
+                self.editing_entry.bind("<Return>", self.save_edit)
+                self.editing_entry.focus()
 
-    def save_edit_on_click(event):
-        nonlocal editing_entry
-        if editing_entry:
-            save_edit()
+    def save_edit_on_click(self, event):
+        """
+        Save the current edit when clicking outside the editing cell.
+        """
+        if self.editing_entry:
+            self.save_edit()
 
-    tree.bind("<Button-1>", edit_cell)
-    frame.bind("<Button-1>", save_edit_on_click)
+    def save_rows(self):
+        """
+        Save all rows to the file, including any currently edited cell.
+        """
+        # Save any currently edited field before saving all rows
+        if self.editing_entry:
+            self.save_edit()
+        # Save all rows to file
+        if self.save_file:
+            rows = [self.tree.item(
+                item, "values") for item in self.tree.get_children()]
+            with open(self.save_file, "w", encoding="utf-8") as f:
+                json.dump(rows, f)
 
-def land_window():
-    window = tk.Tk()
-    window.title("XLSX_to_CSV_Converter")
-    window.geometry("400x300")
+    def load_rows(self):
+        """
+        Load rows from the file and insert them into the table.
+        """
+        # Load rows from file
+        with open(self.save_file, "r", encoding="utf-8") as f:
+            rows = json.load(f)
+        for row in rows:
+            self.tree.insert("", "end", values=row)
 
-    label = tk.Label(window, text="XLSX to CSV Converter",
-        font=("Arial", 16))
-    label.pack(pady=20)
+class EditDefaultWindow(EditRulesWindow):
+    """
+    A specialized EditRulesWindow that hides add row and delete row buttons.
+    Used for editing default rule values.
+    """
+    def __init__(self, headers, save_file, title):
+        """
+        Initialize the EditDefaultWindow.
+        Args:
+            headers (list): List of column headers for the table.
+            save_file (str): Filename for saving the table data.
+            title (str): Title of the window.
+        """
+        super().__init__(headers, save_file, title)
+        # Hide add row and delete row buttons
+        self.add_row_button.pack_forget()
+        self.delete_row_button.pack_forget()
 
-    # Add a button to open the edit rules window
-    headers = ["Header1", "Header2", "Header3"]
-    button = tk.Button(window, text="Edit rules", 
-                        command=lambda: edit_rules_window(headers))
-    button.pack(pady=10)
 
-    window.mainloop()
+class MainWindow:
+    """
+    The main window for the XLSX to CSV Converter.
+    """
+    def __init__(self):
+        """
+        Initialize the main window and its buttons to the rule windows.
+        """
+        # Set window info
+        self.window = tk.Tk()
+        self.window.title("XLSX_to_CSV_Converter")
+        self.window.geometry("400x300")
+
+        label = tk.Label(
+            self.window, text="XLSX to CSV Converter", font=("Arial", 16)
+        )
+        label.pack(pady=20)
+
+        # Create buttons to open EditRulesWindow and EditDefaultWindow
+        headers = ["Header1", "Header2", "Header3"]
+        button_rules = tk.Button(
+            self.window,
+            text="Edit rules",
+            command=lambda: EditRulesWindow(
+                headers, save_file="rules.json", title="Edit Rules"
+            ),
+        )
+        button_rules.pack(pady=10)
+
+        button_default = tk.Button(
+            self.window,
+            text="Edit default",
+            command=lambda: EditDefaultWindow(
+                headers, save_file="default.json", title="Edit Default"
+            ),
+        )
+        button_default.pack(pady=10)
+
+    def run(self):
+        """
+        Start the Tkinter main loop for the application.
+        """
+        self.window.mainloop()
 
 if __name__ == "__main__":
-    land_window()
+    app = MainWindow()
+    app.run()
